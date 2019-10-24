@@ -156,7 +156,7 @@ def affine(inp, n_outmaps,
         apply_b (function): Lambda, function, or callable object applied to the bias.
 
     Returns:
-        :class:`~nnabla.Variable`: :math:`(B + 1)`-D array. (:math:`M_0 \\times \ldots \\times M_{B-1} \\times L`)f
+        :class:`~nnabla.Variable`: :math:`(B + 1)`-D array. (:math:`M_0 \\times \ldots \\times M_{B-1} \\times L`)
 
     """
     if not hasattr(n_outmaps, '__iter__'):
@@ -579,7 +579,7 @@ def convolution(inp, outmaps, kernel,
     Note:
 
         Convolution is a computationally intensive operation that
-        should preferrably be run with the `cudnn` backend. NNabla
+        should preferably be run with the `cudnn` backend. NNabla
         then uses CuDNN library functions to determine and cache the
         fastest algorithm for the given set of convolution parameters,
         which results in additional memory consumption which may pose
@@ -588,7 +588,7 @@ def convolution(inp, outmaps, kernel,
         can be used to restrict the choice of algorithms to those that
         fit the given workspace memory limit, expressed in bytes. In
         some cases it may also be desired to restrict the automatic
-        search to algorithms that produce deterministic (reproducable)
+        search to algorithms that produce deterministic (reproducible)
         results. This can be requested by setting the the environment
         variable `NNABLA_CUDNN_DETERMINISTIC` to a non-zero value.
 
@@ -600,7 +600,7 @@ def convolution(inp, outmaps, kernel,
         stride (:obj:`tuple` of :obj:`int`): Stride sizes for dimensions.
         dilation (:obj:`tuple` of :obj:`int`): Dilation sizes for dimensions.
         group (int): Number of groups of channels. This makes connections across channels more sparse by grouping connections along map direction.
-        channel_last (bool): If True, the last dimension is considered as channel dimension, a.k.a NHWC order.
+        channel_last (bool): If True, the last dimension is considered as channel dimension, a.k.a. NHWC order.
         w_init (:obj:`nnabla.initializer.BaseInitializer` or :obj:`numpy.ndarray`): Initializer for weight. By default, it is initialized with :obj:`nnabla.initializer.UniformInitializer` within the range determined by :obj:`nnabla.initializer.calc_uniform_lim_glorot`.  
         b_init (:obj:`nnabla.initializer.BaseInitializer` or :obj:`numpy.ndarray`): Initializer for bias. By default, it is initialized with zeros if `with_bias` is `True`.
         base_axis (int): Dimensions up to `base_axis` are treated as the sample dimensions.
@@ -1686,7 +1686,8 @@ def gru(x, h, w0_init=None, w_init=None, b_init=None, num_layers=1, dropout=0.0,
     ('var', 'Moving average of batch variance', '<see above>', False),
 ])
 def fused_batch_normalization(inp, z=None, axes=[1], decay_rate=0.9, eps=1e-5,
-                              batch_stat=True, nonlinearity='relu', output_stat=False, fix_parameters=False, param_init=None):
+                              batch_stat=True, nonlinearity='relu', output_stat=False,
+                              fix_parameters=False, param_init=None, no_scale=False, no_bias=False):
     """
     Batch normalization layer fused with the following add2 operation of a
     residual input and an nonlinear activation.
@@ -1708,25 +1709,27 @@ def fused_batch_normalization(inp, z=None, axes=[1], decay_rate=0.9, eps=1e-5,
         nonlinearity (string): Activation function. The default is 'relu'.
         output_stat (bool): Output batch mean and variance.
         fix_parameters (bool): When set to `True`, the beta and gamma will not be updated.
+        no_scale (bool): If `True`, the scale term is omitted.
+        no_bias (bool): If `True`, the bias term is omitted.
 
     Returns:
         :class:`~nnabla.Variable`: N-D array.
 
     """
+    from .normalization_functions import _init_beta_gamma
+
     shape_stat = [1 for _ in inp.shape]
     for i in range(len(axes)):
         shape_stat[axes[i]] = inp.shape[axes[i]]
 
     if param_init is None:
         param_init = {}
-    beta_init = param_init.get('beta', ConstantInitializer(0))
-    gamma_init = param_init.get('gamma', ConstantInitializer(1))
+
+    beta, gamma = _init_beta_gamma(
+        shape_stat, fix_parameters, param_init, no_bias, no_scale)
+
     mean_init = param_init.get('mean', ConstantInitializer(0))
     var_init = param_init.get('var', ConstantInitializer(1))
-    beta = get_parameter_or_create(
-        "beta", shape_stat, beta_init, True, not fix_parameters)
-    gamma = get_parameter_or_create(
-        "gamma", shape_stat, gamma_init, True, not fix_parameters)
     mean = get_parameter_or_create(
         "mean", shape_stat, mean_init, False)
     var = get_parameter_or_create(
@@ -1744,7 +1747,7 @@ def fused_batch_normalization(inp, z=None, axes=[1], decay_rate=0.9, eps=1e-5,
 ])
 def batch_normalization(inp, axes=[1], decay_rate=0.9, eps=1e-5,
                         batch_stat=True, output_stat=False, fix_parameters=False,
-                        param_init=None):
+                        param_init=None, no_scale=False, no_bias=False):
     """
     Batch normalization layer.
 
@@ -1779,6 +1782,8 @@ def batch_normalization(inp, axes=[1], decay_rate=0.9, eps=1e-5,
             A value of the dict must be an :obj:`~nnabla.initializer.Initializer`
             or a :obj:`numpy.ndarray`.
             E.g. ``{'beta': ConstantIntializer(0), 'gamma': np.ones(gamma_shape) * 2}``.
+        no_scale (bool): If `True`, the scale term is omitted.
+        no_bias (bool): If `True`, the bias term is omitted.
 
     Returns:
         :class:`~nnabla.Variable`: N-D array.
@@ -1794,20 +1799,20 @@ def batch_normalization(inp, axes=[1], decay_rate=0.9, eps=1e-5,
     (using numpy expression as an example).
 
     """
+    from .normalization_functions import _init_beta_gamma
+
     shape_stat = [1 for _ in inp.shape]
     for i in range(len(axes)):
         shape_stat[axes[i]] = inp.shape[axes[i]]
 
     if param_init is None:
         param_init = {}
-    beta_init = param_init.get('beta', ConstantInitializer(0))
-    gamma_init = param_init.get('gamma', ConstantInitializer(1))
+
+    beta, gamma = _init_beta_gamma(
+        shape_stat, fix_parameters, param_init, no_bias, no_scale)
+
     mean_init = param_init.get('mean', ConstantInitializer(0))
     var_init = param_init.get('var', ConstantInitializer(1))
-    beta = get_parameter_or_create(
-        "beta", shape_stat, beta_init, True, not fix_parameters)
-    gamma = get_parameter_or_create(
-        "gamma", shape_stat, gamma_init, True, not fix_parameters)
     mean = get_parameter_or_create(
         "mean", shape_stat, mean_init, False)
     var = get_parameter_or_create(
@@ -1824,7 +1829,7 @@ def batch_normalization(inp, axes=[1], decay_rate=0.9, eps=1e-5,
 ])
 def sync_batch_normalization(inp, comm, group="world", axes=[1], decay_rate=0.9, eps=1e-5, batch_stat=True,
                              output_stat=False, fix_parameters=False,
-                             param_init=None):
+                             param_init=None, no_scale=False, no_bias=False):
     """
     Synchronized batch normalization layer.
 
@@ -1863,6 +1868,8 @@ def sync_batch_normalization(inp, comm, group="world", axes=[1], decay_rate=0.9,
             A value of the dict must be an :obj:`~nnabla.initializer.Initializer`
             or a :obj:`numpy.ndarray`.
             E.g. ``{'beta': ConstantIntializer(0), 'gamma': np.ones(gamma_shape) * 2}``.
+        no_scale (bool): If `True`, the scale term is omitted.
+        no_bias (bool): If `True`, the bias term is omitted.
 
     Returns:
         :class:`~nnabla.Variable`: N-D array.
@@ -1879,20 +1886,20 @@ def sync_batch_normalization(inp, comm, group="world", axes=[1], decay_rate=0.9,
     (using numpy expression as an example).
 
     """
+    from .normalization_functions import _init_beta_gamma
+
     shape_stat = [1 for _ in inp.shape]
     for i in range(len(axes)):
         shape_stat[axes[i]] = inp.shape[axes[i]]
 
     if param_init is None:
         param_init = {}
-    beta_init = param_init.get('beta', ConstantInitializer(0))
-    gamma_init = param_init.get('gamma', ConstantInitializer(1))
+
+    beta, gamma = _init_beta_gamma(
+        shape_stat, fix_parameters, param_init, no_bias, no_scale)
+
     mean_init = param_init.get('mean', ConstantInitializer(0))
     var_init = param_init.get('var', ConstantInitializer(1))
-    beta = get_parameter_or_create(
-        "beta", shape_stat, beta_init, True, not fix_parameters)
-    gamma = get_parameter_or_create(
-        "gamma", shape_stat, gamma_init, True, not fix_parameters)
     mean = get_parameter_or_create(
         "mean", shape_stat, mean_init, False)
     var = get_parameter_or_create(
@@ -1949,7 +1956,8 @@ def mean_subtraction(inp, base_axis=1, update_running_mean=True, fix_parameters=
     ('beta', 'Trainable bias :math:`\\beta`', '<see above>', True),
     ('gamma', 'Trainable scaling factor :math:`\\gamma`', '<see above>', True)
 ])
-def layer_normalization(inp, batch_axis=0, eps=1e-05, output_stat=False, fix_parameters=False, param_init=None):
+def layer_normalization(inp, batch_axis=0, eps=1e-05, output_stat=False, fix_parameters=False, param_init=None,
+                        no_scale=False, no_bias=False):
     r"""
     Applies Layer Normalization over an input variable, which is defined as:
 
@@ -1964,6 +1972,11 @@ def layer_normalization(inp, batch_axis=0, eps=1e-05, output_stat=False, fix_par
     :math:`\mu^l` and :math:`\sigma^l` are the mean and std of each layer along batch axis,
     and :math:`\alpha` and :math:`\beta` are trainable parameter.
 
+    .. note::
+        Unlike other normalizations,
+        which applies scalar scale and bias for each entire channel/plane,
+        Layer Normalization applies per-element scale and bias.
+
     References:
 
         * `Jimmy Lei Ba, Jamie Ryan Kiros, Geoffrey E. Hinton, Layer Normalization.
@@ -1973,7 +1986,7 @@ def layer_normalization(inp, batch_axis=0, eps=1e-05, output_stat=False, fix_par
         inp (Variable): An input variable.
         batch_axis (int or repeated int): Axes mean and variance are taken.
         eps (float): Tiny value to avoid zero division by std.
-        output_stat(bool): It `true`, calculated mean and variance are also returned.
+        output_stat(bool): It `True`, calculated mean and variance are also returned.
         fix_parameters (bool): When set to `True`, the beta and gamma will not be updated.
         param_init (dict):
             Parameter initializers can be set with a dict. A key of the dict must
@@ -1981,31 +1994,30 @@ def layer_normalization(inp, batch_axis=0, eps=1e-05, output_stat=False, fix_par
             A value of the dict must be an :obj:`~nnabla.initializer.Initializer`
             or a :obj:`numpy.ndarray`.
             E.g. ``{'gamma': np.ones(...) * 2, 'beta': ConstantIntializer(0)}``.
+        no_scale (bool): If `True`, the scale term is omitted.
+        no_bias (bool): If `True`, the bias term is omitted.
 
     Returns:
         * :obj:`~nnabla.Variable`: Normalized output variable.
         * :obj:`~nnabla.Variable`: Mean (if ``output_stat=True`).
         * :obj:`~nnabla.Variable`: Std (if ``output_stat=True`)
     """
-    from nnabla.normalization_functions import _force_list
+    from nnabla.normalization_functions import _force_list, _init_beta_gamma
 
     batch_axis = _force_list(batch_axis)
 
-    shape_stat = [inp.shape[i] if i in batch_axis else 1
-                  for i in range(len(inp.shape))]
+    shape_stat = list(inp.shape)
+    for baxis in batch_axis:
+        shape_stat[baxis] = 1
 
     if param_init is None:
         param_init = {}
 
-    gamma_init = param_init.get('gamma', ConstantInitializer(1))
-    beta_init = param_init.get('beta', ConstantInitializer(0))
+    beta, gamma = _init_beta_gamma(
+        shape_stat, fix_parameters, param_init, no_bias, no_scale)
 
-    gamma = get_parameter_or_create(
-        "gamma", shape_stat, gamma_init, True, not fix_parameters)
-    beta = get_parameter_or_create(
-        "beta", shape_stat, beta_init, True, not fix_parameters)
-
-    return F.layer_normalization(inp, beta, gamma, batch_axis, eps, output_stat)
+    return F.layer_normalization(inp, beta, gamma,
+                                 batch_axis=batch_axis, eps=eps, output_stat=output_stat)
 
 
 @parametric_function_api("instance_normalization", [
@@ -2013,7 +2025,7 @@ def layer_normalization(inp, batch_axis=0, eps=1e-05, output_stat=False, fix_par
     ('gamma', 'Trainable scaling factor :math:`\\gamma`', '<see above>', True),
 ])
 def instance_normalization(inp, channel_axis=1, batch_axis=0, eps=1e-05, output_stat=False, fix_parameters=False,
-                           param_init=None):
+                           param_init=None, no_scale=False, no_bias=False):
     r"""
     Applies Instance Normalization over an input variable, which is defined as:
 
@@ -2040,39 +2052,35 @@ def instance_normalization(inp, channel_axis=1, batch_axis=0, eps=1e-05, output_
         channel_axis (int or repeated int): Channel axes.
         batch_axis (int or repeated int): Batch axes.
         eps (float): Tiny value to avoid zero division by std.
-        output_stat(bool): It true, the batch statistics of mean and variance.
-        fix_parameters (bool): When set to `True`, the beta and gamma will not be updated.
+        output_stat(bool): It `True`, the batch statistics of mean and variance.
+        fix_parameters (bool): If `True`, the beta and gamma will not be updated.
         param_init (dict):
             Parameter initializers can be set with a dict. A key of the dict must
             be ``'gamma'``, ``'beta'``.
             A value of the dict must be an :obj:`~nnabla.initializer.Initializer`
             or a :obj:`numpy.ndarray`.
             E.g. ``{'gamma': np.ones(...) * 2, 'beta': ConstantIntializer(0)}``.
+        no_scale (bool): If `True`, the scale term is omitted.
+        no_bias (bool): If `True`, the bias term is omitted.
 
-    Returns:
-        * :obj:`~nnabla.Variable`: Normalized output variable.
-        * :obj:`~nnabla.Variable`: Mean (if ``output_stat=True`)
-        * :obj:`~nnabla.Variable`: Std (if ``output_stat=True`)
-    """
-    from nnabla.normalization_functions import _force_list
+        Returns:
+            * :obj:`~nnabla.Variable`: Normalized output variable.
+            * :obj:`~nnabla.Variable`: Mean (if ``output_stat=True`)
+            * :obj:`~nnabla.Variable`: Std (if ``output_stat=True`)
+        """
+    from nnabla.normalization_functions import _init_beta_gamma
 
-    batch_axis = _force_list(batch_axis)
-
-    shape_stat = [inp.shape[i] if i in [channel_axis, ] + batch_axis else 1
-                  for i in range(len(inp.shape))]
+    shape_stat = [1 for _ in range(len(inp.shape))]
+    shape_stat[channel_axis] = inp.shape[channel_axis]
 
     if param_init is None:
         param_init = {}
 
-    gamma_init = param_init.get('gamma', ConstantInitializer(1))
-    beta_init = param_init.get('beta', ConstantInitializer(0))
+    beta, gamma = _init_beta_gamma(
+        shape_stat, fix_parameters, param_init, no_bias, no_scale)
 
-    gamma = get_parameter_or_create(
-        "gamma", shape_stat, gamma_init, True, not fix_parameters)
-    beta = get_parameter_or_create(
-        "beta", shape_stat, beta_init, True, not fix_parameters)
-
-    return F.instance_normalization(inp, beta, gamma, channel_axis, batch_axis, eps, output_stat)
+    return F.instance_normalization(inp, beta, gamma,
+                                    channel_axis=channel_axis, batch_axis=batch_axis, eps=eps, output_stat=output_stat)
 
 
 @parametric_function_api("group_normalization", [
@@ -2080,7 +2088,7 @@ def instance_normalization(inp, channel_axis=1, batch_axis=0, eps=1e-05, output_
     ('gamma', 'Trainable scaling factor :math:`\\gamma`', '<see above>', True),
 ])
 def group_normalization(inp, num_groups, channel_axis=1, batch_axis=0, eps=1e-05, output_stat=False,
-                        fix_parameters=False, param_init=None):
+                        fix_parameters=False, param_init=None, no_scale=False, no_bias=False):
     r"""
     Applies Group Normalization over an input tensor, which is defined as:
 
@@ -2121,33 +2129,32 @@ def group_normalization(inp, num_groups, channel_axis=1, batch_axis=0, eps=1e-05
             A value of the dict must be an :obj:`~nnabla.initializer.Initializer`
             or a :obj:`numpy.ndarray`.
             E.g. ``{'gamma': np.ones(...) * 2, 'beta': ConstantIntializer(0)}``.
+        no_scale (bool): If `True`, the scale term is omitted.
+        no_bias (bool): If `True`, the bias term is omitted.
+
 
     Returns:
         * :obj:`~nnabla.Variable`: Normalized output variable.
         * :obj:`~nnabla.Variable`: Mean (if ``output_stat=True`)
         * :obj:`~nnabla.Variable`: Std (if ``output_stat=True`)
     """
-    from nnabla.normalization_functions import _force_list
+    from nnabla.normalization_functions import _force_list, _init_beta_gamma
 
     batch_axis = _force_list(batch_axis)
 
-    shape_stat = [inp.shape[i]
-                  if i in batch_axis else 1 for i in range(len(inp.shape) + 1)]
-    shape_stat[channel_axis] = num_groups
-    shape_stat[channel_axis + 1] = int(inp.shape[channel_axis] / num_groups)
+    shape_stat = [1 for _ in range(len(inp.shape))]
+    shape_stat[channel_axis] = inp.shape[channel_axis]
 
     if param_init is None:
         param_init = {}
 
-    gamma_init = param_init.get('gamma', ConstantInitializer(1))
-    beta_init = param_init.get('beta', ConstantInitializer(0))
+    beta, gamma = _init_beta_gamma(
+        shape_stat, fix_parameters, param_init, no_bias, no_scale)
 
-    gamma = get_parameter_or_create(
-        "gamma", shape_stat, gamma_init, True, not fix_parameters)
-    beta = get_parameter_or_create(
-        "beta", shape_stat, beta_init, True, not fix_parameters)
-
-    return F.group_normalization(inp, beta, gamma, num_groups, channel_axis, batch_axis, eps, output_stat)
+    # we dont have to broadcast beta and gamma here in this case because adaptive operation in bn is not used.
+    return F.group_normalization(inp, beta, gamma,
+                                 num_groups=num_groups, channel_axis=channel_axis, batch_axis=batch_axis,
+                                 eps=eps, output_stat=output_stat)
 
 
 @parametric_function_api("embed", [
@@ -2335,7 +2342,7 @@ def fixed_point_quantized_affine(inp, n_outmaps,
     ('b_q', 'Quantized biases', '(outmaps,)', False),
 ])
 def fixed_point_quantized_convolution(inp, outmaps, kernel,
-                                      pad=None, stride=None, dilation=None, group=1,
+                                      pad=None, stride=None, dilation=None, group=1, channel_last=False,
                                       w_init=None, b_init=None,
                                       base_axis=1, fix_parameters=False, rng=None, with_bias=True,
                                       quantize_w=True, sign_w=True, n_w=8, delta_w=2**-4, ste_fine_grained_w=True,
@@ -2395,9 +2402,15 @@ def fixed_point_quantized_convolution(inp, outmaps, kernel,
         :class:`~nnabla.Variable`: N-D array.
 
     """
+    if channel_last:
+        channels = inp.shape[-1]
+        filter_shape = tuple(kernel) + (channels // group,)
+    else:
+        channels = inp.shape[base_axis]
+        filter_shape = (channels // group,) + tuple(kernel)
     if w_init is None:
         w_init = UniformInitializer(
-            calc_uniform_lim_glorot(inp.shape[base_axis], outmaps, tuple(kernel)), rng=rng)
+            calc_uniform_lim_glorot(channels, outmaps, tuple(kernel)), rng=rng)
     if with_bias and b_init is None:
         b_init = ConstantInitializer()
 
@@ -2409,7 +2422,7 @@ def fixed_point_quantized_convolution(inp, outmaps, kernel,
     # Quantized Weight
     if quantize_w:
         w_q = get_parameter_or_create(
-            "W_q", (outmaps, inp.shape[base_axis] // group) + tuple(kernel),
+            "W_q", (outmaps,) + filter_shape,
             w_init, False)
         # Link computation graph
         real_w_q = F.fixed_point_quantize(w, quantize=quantize_w,
@@ -2785,7 +2798,7 @@ def pruned_affine(inp, n_outmaps,
     ('b_q', 'Quantized biases', '(outmaps,)', False),
 ])
 def pruned_convolution(inp, outmaps, kernel,
-                       pad=None, stride=None, dilation=None, group=1,
+                       pad=None, stride=None, dilation=None, group=1, channel_last=False,
                        w_init=None, b_init=None,
                        base_axis=1, fix_parameters=False, rng=None, with_bias=True,
                        prune_w=True, rate_w=0.9, prune_b=True, rate_b=0.9):
@@ -2838,15 +2851,21 @@ def pruned_convolution(inp, outmaps, kernel,
         :class:`~nnabla.Variable`: N-D array.
 
     """
+    if channel_last:
+        channels = inp.shape[-1]
+        filter_shape = tuple(kernel) + (channels // group,)
+    else:
+        channels = inp.shape[base_axis]
+        filter_shape = (channels // group,) + tuple(kernel)
     if w_init is None:
         w_init = UniformInitializer(
-            calc_uniform_lim_glorot(inp.shape[base_axis], outmaps, tuple(kernel)), rng=rng)
+            calc_uniform_lim_glorot(channels, outmaps, tuple(kernel)), rng=rng)
     if with_bias and b_init is None:
         b_init = ConstantInitializer()
 
     # Floating Weight
     w = get_parameter_or_create(
-        "W", (outmaps, inp.shape[base_axis] // group) + tuple(kernel),
+        "W", (outmaps,) + filter_shape,
         w_init, True, not fix_parameters)
 
     # Quantized Weight
@@ -2875,7 +2894,445 @@ def pruned_convolution(inp, outmaps, kernel,
         else:
             real_b_q = b
 
-    return F.convolution(inp, real_w_q, real_b_q, base_axis, pad, stride, dilation, group)
+    return F.convolution(inp, real_w_q, real_b_q, base_axis, pad, stride, dilation, group, channel_last)
+
+
+@parametric_function_api("min_max_quantize", [
+    ('qr_min', 'Minimum quantization range, the exponential movining average of min values of inputs initialized with -6.0 if ema is True', 'ql_min.shape', False),
+    ('qr_max', 'Maximum quantization range, the exponential movining average of max values of inputs initialized with 6.0 if ema is True', 'ql_max.shape', False),
+])
+def min_max_quantize(x, ql_min=0, ql_max=255, decay=0.999, x_min_max=False, ema=False,
+                     ste_fine_grained=True, eps=0.01,
+                     qr_min_init=None, qr_max_init=None, fix_parameters=False,
+                     outputs=None):
+    r"""Min-max quantization.
+
+    This function uniformly quantizes values in the range of min and max quantization levels.
+
+    Min-max quantization is defined as the following equation
+
+    .. math::
+
+        y = round \left(\frac{\min(\max(x, m), M) - m}{scale} \right) \times scale + m, 
+
+    where the :math:`scale` is defined as 
+
+    .. math::
+
+        scale = \frac{M - m}{M_q - m_q}, 
+
+    and 
+
+    .. math::
+
+        m_q = ql_{min}, \\
+        M_q = ql_{max}, \\
+        m = qr_{min}, \\
+        M = qr_{max}.
+
+    In the backward pass when using `ste_fine_grained` as false,
+
+        .. math::
+
+          \frac{\partial q_i}{\partial x_i} = 1.
+
+
+    In the backward pass when using `ste_fine_grained` as true,
+
+        .. math::
+
+           \frac{\partial q_i}{\partial x_i}= \left\{
+         \begin{array}{ll}
+           0 & if \ \ \ x_i > M \\
+           1 & if \ \ m \le x_i \le M \\
+           0 & if \ \ x_i < m \\
+         \end{array} \right..
+
+    :math:`qr_{min}` and :math:`qr_{max}` are treaded as follows.
+
+        * `x_min_max` is `True` and `ema` is `True`: 
+          Exponential moving average are computed for each :math:`min(x)` and :math:`max(x)` 
+          then stored in :math:`qr_{min}` and :math:`qr_{max}`.
+        * `x_min_max` is `True` and `ema` is `False`:
+          :math:`min(x)` and :math:`max(x)` are computed then stored in :math:`qr_{min}` and :math:`qr_{max}`.
+        * `x_min_max` is `False` and `ema` is `True`:
+          Exponential moving average stored in :math:`qr_{min}` and :math:`qr_{max}` are used.
+        * `x_min_max` is `False` and `ema` is `False`
+          Gradients of :math:`qr_{min}` and :math:`qr_{max}` are computed in the backward pass.
+
+    More precisely, in inference of the min-max quantization, one has to consider *zero-point (zp)*
+    which corresponds
+    to the real value 0, and its data type is an integer. *zero-point* is defined as 
+
+        .. math::
+
+           && zp_f = ql_{min} -\frac{qr_{min}}{scale}, \\
+           && zp = \left\{
+         \begin{array}{ll}
+           ql_{max} & if \ \ \ zp_f >= ql_{max} \\
+           round(zp_f) & if \ \ otherwise \\
+           ql_{min}  & if \ \ zp_f <= ql_{min} \\
+         \end{array} \right..
+
+    Accordingly, in order to simulate quantization effect of *zero-point*, 
+    during both forward and backward pass, :math:`qr_{min}` and :math:`qr_{max}` are adjusted as follows,
+
+        .. math::
+
+           qr_{min}^{adj} = ql_{min} - zp * scale, \\
+           qr_{max}^{adj} = ql_{max} - zp * scale.
+
+    These operations are often called *nudge*. 
+
+    Finally, in the formulas of the min-max quantization, :math:`m` and :math:`M` are replaced by
+    :math:`qr_{min}^{adj}` and :math:`qr_{max}^{adj}` respectively.
+
+    Args:
+        x (~nnabla.Variable): Input N-D array.
+        ql_min (int, float, or ~nnabla.Variable): Minimum quantization level. Default is 0.
+        ql_max (int, float, or ~nnabla.Variable): Maximum quantization level. Default is 255.
+        decay (float): The decay rate for the exponential moving average.
+        x_min_max (bool): Use the min and max of x to compute quantization ranges. Default is `False`.
+        ema (bool): Use the exponential moving average for the min and max quantization ranges.
+                    Default is `False`.
+        ste_fine_grained (bool): If true, STE is not 1, the {0, 1}-mask computed from the min-max is applied to the gradient in the backward; otherwise, STE is 1.
+        eps (float): Epsilon, or small value to ensure :math:`qr_{max} - qr_{min}` must be greater
+                     than the epsilon for both weights and bias.
+        qr_min_init (:obj:`nnabla.initializer.BaseInitializer` or :obj:`numpy.ndarray`): Initializer for the minimum quantization range, qr_min. Default is :obj:`nnabla.initializer.ConstantInitializer` (-6.0).
+        qr_max_init (:obj:`nnabla.initializer.BaseInitializer` or :obj:`numpy.ndarray`): Initializer for the maximum quantization rage, qr_max Default is :obj:`nnabla.initializer.ConstantInitializer` (6.0).
+        fix_parameters (bool): When set to `True`, the weights and biases will not be updated.
+
+    References:
+        Benoit Jacob, Skirmantas Kligys, Bo Chen, Menglong Zhu, Matthew Tang, Andrew Howard, Hartwig Adam, and Dmitry Kalenichenko, "Quantization and Training of Neural Networks for Efficient Integer-Arithmetic-Only Inference", https://arxiv.org/abs/1712.05877
+
+    """
+    # ql_min and ql_max
+    if isinstance(ql_min, (int, float)):
+        reshape = [1 for _ in range(x.ndim)]
+        ql_min = np.array(ql_min).reshape(reshape)
+        ql_min = get_parameter_or_create(
+            "ql_min", reshape, ql_min, False, False)
+    if isinstance(ql_max, (int, float)):
+        reshape = [1 for _ in range(x.ndim)]
+        ql_max = np.array(ql_max).reshape(reshape)
+        ql_max = get_parameter_or_create(
+            "ql_max", reshape, ql_max, False, False)
+    # qr_min and qr_max
+    qr_min_init = qr_min_init if qr_min_init else ConstantInitializer(-6.0)
+    qr_max_init = qr_max_init if qr_max_init else ConstantInitializer(6.0)
+    shape = ql_min.shape
+    qr_min = get_parameter_or_create(
+        "qr_min", shape, qr_min_init, not (x_min_max and ema), not fix_parameters)
+    qr_max = get_parameter_or_create(
+        "qr_max", shape, qr_max_init, not (x_min_max and ema), not fix_parameters)
+    x_q = F.min_max_quantize(x, qr_min, qr_max, ql_min, ql_max,
+                             decay, x_min_max, ema, ste_fine_grained, eps, outputs=outputs)
+    return x_q
+
+
+@parametric_function_api("min_max_quantized_affine", [
+    ('W', 'Weight matrix in float', '(inmaps, outmaps)', True),
+    ('b', 'Bias vector in float', '(outmaps,)', True),
+    ('W_q', 'Quantized weights', '(inmaps, outmaps)', False),
+    ('b_q', 'Quantized biases', '(outmaps,)', False),
+    ('qr_min', 'Minimum quantization range. Minimum values of inputs or trainable range.',
+     'ql_min.shape', False),
+    ('qr_max', 'Maximum quantization range. Maximum values of inputs or trainable range.',
+     'ql_max.shape', False)
+])
+def min_max_quantized_affine(inp, n_outmaps,
+                             base_axis=1,
+                             w_init=None, b_init=None,
+                             fix_parameters=False, rng=None, with_bias=True,
+                             quantize_w=True, ql_min_w=0, ql_max_w=255, w_min_max=False,
+                             qr_min_w_init=None, qr_max_w_init=None,
+                             ste_fine_grained_w=True,
+                             quantize_b=True, ql_min_b=0, ql_max_b=255, b_min_max=False,
+                             qr_min_b_init=None, qr_max_b_init=None,
+                             ste_fine_grained_b=True,
+                             eps=0.01):
+    r"""Min-max Quantized Affine.
+
+    Min-max Quantized Affine is the affine function,
+    except the definition of the inner product is modified.
+    The input-output relation of this function is as follows:
+
+    .. math::
+
+        y_j = \sum_{i} Q(w_{ji}) x_i,
+
+    where :math:`Q(w_{ji})` is the min-max quantization function.
+
+    In the min_max_quantized affine, the exponential moving average is not used. the min and max quantization
+    ranges are either the min-max of weights and bias or trained.
+
+    Notice that the min and max values of inputs are always used instead of the exponential moving average.
+
+    .. note::
+
+        1) if you would like to share weights between some layers, please
+        make sure to share the standard, floating value weights (`weight`)
+        and not the quantized weights (`quantized weight`)
+
+        2) The weights and the quantized weights become synced only after :func:`~nnabla._variable.Variable.forward` is called,
+        and not after a call to :func:`~nnabla._variable.Variable.backward`.
+        To access the parameters of the network, remember to call :func:`~nnabla._variable.Variable.forward` once before doing so, otherwise the
+        float weights and the quantized weights will not be in sync.
+
+        3) CPU and GPU implementations now use float value for `quantized weight`,
+        since this function is only for simulation purposes.
+
+    Args:
+        inp (~nnabla.Variable): Input N-D array with shape (:math:`M_0 \times \ldots \times M_{B-1} \times D_B \times \ldots \times D_N`). Dimensions before and after base_axis are flattened as if it is a matrix.
+        n_outmaps (:obj:`int` or :obj:`tuple` of :obj:`int`): Number of output neurons per data.
+        base_axis (int): Dimensions up to `base_axis` are treated as the sample dimensions.
+        w_init (:obj:`nnabla.initializer.BaseInitializer` or :obj:`numpy.ndarray`): Initializer for weight. By default, it is initialized with :obj:`nnabla.initializer.UniformInitializer` within the range determined by :obj:`nnabla.initializer.calc_uniform_lim_glorot`. 
+        b_init (:obj:`nnabla.initializer.BaseInitializer` or :obj:`numpy.ndarray`): Initializer for bias. By default, it is initialized with zeros if `with_bias` is `True`.
+        fix_parameters (bool): When set to `True`, the weights and biases will not be updated.
+        rng (numpy.random.RandomState): Random generator for Initializer.
+        with_bias (bool): Specify whether to include the bias term.
+        quantize_w (bool): Quantize weights if `True`.
+        ql_min_w (int, float, or ~nnabla.Variable): Minimum quantization level for weights. Default is 0.
+        ql_max_w (int, float, or ~nnabla.Variable): Maximum quantization level for weights. Default is 255.
+        w_min_max (bool): Use the min and max of weights to compute quantization ranges. Default is `False`.
+        qr_min_w_init (:obj:`nnabla.initializer.BaseInitializer` or :obj:`numpy.ndarray`): Initializer for the minimum quantization range, qr_min. Default is :obj:`nnabla.initializer.ConstantInitializer` (-2.0).
+        qr_max_w_init (:obj:`nnabla.initializer.BaseInitializer` or :obj:`numpy.ndarray`): Initializer for the minimum quantization range, qr_min. Default is :obj:`nnabla.initializer.ConstantInitializer` (2.0).
+        ste_fine_grained_w (bool): If true, STE is not 1, the {0, 1}-mask computed from the min-max is applied to the gradient in the backward; otherwise, STE is 1.
+        quantize_b (bool): Quantize bias if `True`.
+        ql_min_b (int, float, or ~nnabla.Variable): Minimum quantization level for bias. Default is 0.
+        ql_max_b (int, float, or ~nnabla.Variable): Maximum quantization level for bias. Default is 255.
+        b_min_max (bool): Use the min and max of bias to compute quantization ranges. Default is `False`.
+        qr_min_b_init (:obj:`nnabla.initializer.BaseInitializer` or :obj:`numpy.ndarray`): Initializer for the minimum quantization range, qr_min. Default is :obj:`nnabla.initializer.ConstantInitializer` (-6.0).
+        qr_max_b_init (:obj:`nnabla.initializer.BaseInitializer` or :obj:`numpy.ndarray`): Initializer for the minimum quantization range, qr_min. Default is :obj:`nnabla.initializer.ConstantInitializer` (6.0).
+        ste_fine_grained_b (bool): If true, STE is not 1, the {0, 1}-mask computed from the min-max is applied to the gradient in the backward; otherwise, STE is 1.
+        eps (float): Epsilon, or small value to ensure :math:`qr_{max} - qr_{min}` must be greater
+                     than the epsilon for both weights and bias.
+    Returns:
+        :class:`~nnabla.Variable`: :math:`(B + 1)`-D array. (:math:`M_0 \times \ldots \times M_{B-1} \times L`)
+
+    """
+
+    if not hasattr(n_outmaps, '__iter__'):
+        n_outmaps = [n_outmaps]
+    n_outmaps = list(n_outmaps)
+    n_outmap = int(np.prod(n_outmaps))
+    if w_init is None:
+        inmaps = np.prod(inp.shape[base_axis:])
+        w_init = UniformInitializer(
+            calc_uniform_lim_glorot(inmaps, n_outmap), rng=rng)
+    if with_bias and b_init is None:
+        b_init = ConstantInitializer()
+    if qr_min_w_init is None:
+        qr_min_w_init = ConstantInitializer(-2.0)
+    if qr_max_w_init is None:
+        qr_max_w_init = ConstantInitializer(2.0)
+    if qr_min_b_init is None:
+        qr_min_b_init = ConstantInitializer(-6.0)
+    if qr_max_b_init is None:
+        qr_max_b_init = ConstantInitializer(6.0)
+
+    # Floating Weight
+    w = get_parameter_or_create(
+        "W", [int(np.prod(inp.shape[base_axis:]))] + n_outmaps,
+        w_init, True, not fix_parameters)
+
+    # Quantized Weight
+    if quantize_w:
+        w_q = get_parameter_or_create(
+            "W_q", [int(np.prod(inp.shape[base_axis:]))] + n_outmaps,
+            w_init, False)
+        # Link computation graph
+        real_w_q = min_max_quantize(w, ql_min_w, ql_max_w, 0.999, w_min_max, False,
+                                    qr_min_init=qr_min_w_init, qr_max_init=qr_max_w_init,
+                                    ste_fine_grained=ste_fine_grained_w,
+                                    eps=eps,
+                                    fix_parameters=fix_parameters,
+                                    outputs=[w_q.data],
+                                    name="min_max_quantize_w")
+        real_w_q.persistent = True
+    else:
+        real_w_q = w
+
+    # Bias
+    # Floating
+    b = None
+    b_q = None
+    real_b_q = None
+    if with_bias:
+        b = get_parameter_or_create(
+            "b", n_outmaps, b_init, True, not fix_parameters)
+        if quantize_b:
+            b_q = get_parameter_or_create(
+                "b_q", n_outmaps, b_init, False)
+            # Link computation graph
+            real_b_q = min_max_quantize(b, ql_min_b, ql_max_b, 0.999, b_min_max, False,
+                                        qr_min_init=qr_min_b_init, qr_max_init=qr_max_b_init,
+                                        ste_fine_grained=ste_fine_grained_b,
+                                        eps=eps,
+                                        fix_parameters=fix_parameters,
+                                        outputs=[b_q.data],
+                                        name="min_max_quantize_b")
+            real_b_q.persistent = True
+        else:
+            real_b_q = b
+
+    return F.affine(inp, real_w_q, real_b_q, base_axis)
+
+
+@parametric_function_api("min_max_quantized_conv", [
+    ('W', 'Filter weights in float', '(outmaps, inmaps // group, *kernel)', True),
+    ('b', 'Bias vector in float', '(outmaps,)', True),
+    ('W_q', 'Quantized weights', '(outmaps, inmaps // group, *kernel)', False),
+    ('b_q', 'Quantized biases', '(outmaps,)', False),
+    ('qr_min', 'Minimum quantization range. Minimum values of inputs or trainable range.',
+     'ql_min.shape', False),
+    ('qr_max', 'Maximum quantization range. Maximum values of inputs or trainable range.',
+     'ql_max.shape', False)
+])
+def min_max_quantized_convolution(inp, outmaps, kernel,
+                                  pad=None, stride=None, dilation=None, group=1, channel_last=False,
+                                  w_init=None, b_init=None,
+                                  base_axis=1, fix_parameters=False, rng=None, with_bias=True,
+                                  quantize_w=True, ql_min_w=0, ql_max_w=255, w_min_max=False,
+                                  qr_min_w_init=None, qr_max_w_init=None,
+                                  ste_fine_grained_w=True,
+                                  quantize_b=True, ql_min_b=0, ql_max_b=255, b_min_max=False,
+                                  qr_min_b_init=None, qr_max_b_init=None,
+                                  ste_fine_grained_b=True,
+                                  eps=0.01):
+    r"""Min-max Quantized Convolution.
+
+    Min-max Quantized Convolution is the convolution function,
+    except the definition of the inner product is modified.
+    The input-output relation of this function is as follows:
+
+    .. math::
+
+        y_{n, a, b} = \sum_{m} \sum_{i} \sum_{j} Q(w_{n, m, i, j}) x_{m, a + i, b + j},
+
+    where :math:`Q(w_{n, m, i, j})` is the min-max quantization function.
+
+    In the min_max_quantized convolution, the exponential moving average is not used.
+    the min and max quantization ranges are either the min-max of weights and bias or trained.
+
+    Notice that the min and max values of inputs are always used instead of the exponential moving average.
+
+    .. note::
+
+        1) if you would like to share weights between some layers, please
+        make sure to share the standard, floating value weights (`weight`)
+        and not the quantized weights (`quantized weight`)
+
+        2) The weights and the quantized weights become synced only after :func:`~nnabla._variable.Variable.forward` is called,
+        and not after a call to :func:`~nnabla._variable.Variable.backward`.
+        To access the parameters of the network, remember to call :func:`~nnabla._variable.Variable.forward` once before doing so, otherwise the
+        float weights and the quantized weights will not be in sync.
+
+        3) CPU and GPU implementations now use float value for `quantized weight`,
+        since this function is only for simulation purposes.
+
+    Args:
+        inp (~nnabla.Variable): N-D array.
+        outmaps (int): Number of convolution kernels (which is equal to the number of output channels). For example, to apply convolution on an input with 16 types of filters, specify 16.
+        kernel (:obj:`tuple` of :obj:`int`): Convolution kernel size. For example, to apply convolution on an image with a 3 (height) by 5 (width) two-dimensional kernel, specify (3,5).
+        pad (:obj:`tuple` of :obj:`int`): Padding sizes for dimensions.
+        stride (:obj:`tuple` of :obj:`int`): Stride sizes for dimensions.
+        dilation (:obj:`tuple` of :obj:`int`): Dilation sizes for dimensions.
+        group (int): Number of groups of channels. This makes connections across channels more sparse by grouping connections along map direction.
+        channel_last (bool): If True, the last dimension is considered as channel dimension, a.k.a. NHWC order.
+        w_init (:obj:`nnabla.initializer.BaseInitializer` or :obj:`numpy.ndarray`): Initializer for weight. By default, it is initialized with :obj:`nnabla.initializer.UniformInitializer` within the range determined by :obj:`nnabla.initializer.calc_uniform_lim_glorot`.  
+        b_init (:obj:`nnabla.initializer.BaseInitializer` or :obj:`numpy.ndarray`): Initializer for bias. By default, it is initialized with zeros if `with_bias` is `True`.
+        base_axis (int): Dimensions up to `base_axis` are treated as the sample dimensions.
+        fix_parameters (bool): When set to `True`, the weights and biases will not be updated.
+        rng (numpy.random.RandomState): Random generator for Initializer.
+        with_bias (bool): Specify whether to include the bias term.
+        quantize_w (bool): Quantize weights if `True`.
+        ql_min_w (int, float, or ~nnabla.Variable): Minimum quantization level for weights. Default is 0.
+        ql_max_w (int, float, or ~nnabla.Variable): Maximum quantization level for weights. Default is 255.
+        w_min_max (bool): Use the min and max of weights to compute quantization ranges. Default is `False`.
+        qr_min_w_init (:obj:`nnabla.initializer.BaseInitializer` or :obj:`numpy.ndarray`): Initializer for the minimum quantization range, qr_min. Default is :obj:`nnabla.initializer.ConstantInitializer` (-2.0).
+        qr_max_w_init (:obj:`nnabla.initializer.BaseInitializer` or :obj:`numpy.ndarray`): Initializer for the maximum quantization rage, qr_max Default is :obj:`nnabla.initializer.ConstantInitializer` (2.0).
+        ste_fine_grained_w (bool): If true, STE is not 1, the {0, 1}-mask computed from the min-max is applied to the gradient in the backward; otherwise, STE is 1.
+        quantize_b (bool): Quantize bias if `True`.
+        ql_min_b (int, float, or ~nnabla.Variable): Minimum quantization level for bias. Default is 0.
+        ql_max_b (int, float, or ~nnabla.Variable): Maximum quantization level for bias. Default is 255.
+        b_min_max (bool): Use the min and max of bias to compute quantization ranges. Default is `False`.
+        qr_min_b_init (:obj:`nnabla.initializer.BaseInitializer` or :obj:`numpy.ndarray`): Initializer for the minimum quantization range, qr_min. Default is :obj:`nnabla.initializer.ConstantInitializer` (-6.0).
+        qr_max_b_init (:obj:`nnabla.initializer.BaseInitializer` or :obj:`numpy.ndarray`): Initializer for the maximum quantization rage, qr_max Default is :obj:`nnabla.initializer.ConstantInitializer` (6.0).
+        ste_fine_grained_b (bool): If true, STE is not 1, the {0, 1}-mask computed from the min-max is applied to the gradient in the backward; otherwise, STE is 1.
+        eps (float): Epsilon, or small value to ensure :math:`qr_{max} - qr_{min}` must be greater
+                     than the epsilon for both weights and bias.
+    Returns:
+        :class:`~nnabla.Variable`: N-D array.
+
+    """
+    if channel_last:
+        channels = inp.shape[-1]
+        filter_shape = tuple(kernel) + (channels // group,)
+    else:
+        channels = inp.shape[base_axis]
+        filter_shape = (channels // group,) + tuple(kernel)
+    if w_init is None:
+        w_init = UniformInitializer(
+            calc_uniform_lim_glorot(channels, outmaps, tuple(kernel)), rng=rng)
+    if with_bias and b_init is None:
+        b_init = ConstantInitializer()
+    if qr_min_w_init is None:
+        qr_min_w_init = ConstantInitializer(-2.0)
+    if qr_max_w_init is None:
+        qr_max_w_init = ConstantInitializer(2.0)
+    if qr_min_b_init is None:
+        qr_min_b_init = ConstantInitializer(-6.0)
+    if qr_max_b_init is None:
+        qr_max_b_init = ConstantInitializer(6.0)
+
+    # Floating Weight
+    w = get_parameter_or_create(
+        "W", (outmaps,) + filter_shape,
+        w_init, True, not fix_parameters)
+
+    # Quantized Weight
+    if quantize_w:
+        w_q = get_parameter_or_create(
+            "W_q", (outmaps,) + filter_shape,
+            w_init, False)
+        # Link computation graph
+        real_w_q = min_max_quantize(w, ql_min_w, ql_max_w, 0.999, w_min_max, False,
+                                    qr_min_init=qr_min_w_init, qr_max_init=qr_max_w_init,
+                                    ste_fine_grained=ste_fine_grained_w,
+                                    eps=eps,
+                                    fix_parameters=fix_parameters,
+                                    outputs=[w_q.data],
+                                    name="min_max_quantize_w")
+        real_w_q.persistent = True
+    else:
+        real_w_q = w
+
+    # Bias
+    # Floating
+    b = None
+    b_q = None
+    real_b_q = None
+
+    if with_bias:
+        b = get_parameter_or_create(
+            "b", (outmaps,), b_init, True, not fix_parameters)
+        if quantize_b:
+            b_q = get_parameter_or_create(
+                "b_q", (outmaps,), b_init, False)
+            # Link computation graph
+            real_b_q = min_max_quantize(b, ql_min_b, ql_max_b, 0.999, b_min_max, False,
+                                        qr_min_init=qr_min_b_init, qr_max_init=qr_max_b_init,
+                                        ste_fine_grained=ste_fine_grained_b,
+                                        eps=eps,
+                                        fix_parameters=fix_parameters,
+                                        outputs=[b_q.data],
+                                        name="min_max_quantize_b")
+            real_b_q.persistent = True
+        else:
+            real_b_q = b
+
+    return F.convolution(inp, real_w_q, real_b_q, base_axis, pad, stride, dilation, group, channel_last)
 
 
 @parametric_function_api("lstm", [
@@ -2977,7 +3434,7 @@ class LSTMCell:
 
 
 @parametric_function_api("spectral-norm", [
-    ('W_sn', 'Spectral Normalized Weight matrix.', 'w.shape', False),
+    ('W_sn', 'Spectral Normalized Weight matrix', 'w.shape', False),
     ('u', 'singular vector', '(w.shape[dim], )', False),
 ])
 def spectral_norm(w, dim=0, itr=1, eps=1e-12, test=False, u_init=None, fix_parameters=True):
@@ -3138,3 +3595,120 @@ def _spectral_norm_outer_most_dim(w, dim, itr=1, eps=1e-12, test=False,
     w_sn = F.identity(w_sn, outputs=[W_sn.data])
     w_sn.persistent = True
     return w_sn
+
+
+@parametric_function_api("multi_head_attention", [
+    ('q_weight', 'weights for query', '(E, E)', True),
+    ('k_weight', 'weights for key', '(E_k, E)', True),
+    ('v_weight', 'weights for value', '(E_v, E)', True),
+    ('out_weight', 'weigths for out projection', '(E, E)', True),
+    ('q_bias', 'bias for query', '(E, )', True),
+    ('k_bias', 'bias for key', '(E, )', True),
+    ('v_bias', 'bais for value', '(E, )', True),
+    ('out_bias', 'bias for out projection', '(E, )', True),
+    ('attn_bias_k', 'attnetion bias for k', '(E, 1)', True),
+    ('attn_bias_v', 'attnetion bias for v', '(E, 1)', True),
+])
+def multi_head_attention(query, key, value, num_heads=12, dropout=0.0, rng=None, with_bias=True, add_attn_bias=False, additive_mask=None, key_padding_mask=None, fix_parameters=False, param_init=None):
+    '''MultiHeadAttention.
+
+    Computes multi-headed attention with query, key, and value.
+    We use the following notations to describe the inputs and outputs below.
+    :math:`L_T`: target sequence length, :math:`L_S`: source sequence length, :math:`B`: batch size, :math:`E`: embedding dimension.
+
+    References:
+
+        A. Vaswani et al. "Attention is All You Need."
+        NIPS. 2017.
+        <https://papers.nips.cc/paper/7181-attention-is-all-you-need.pdf>
+
+    Example:
+
+    .. code-block:: python
+
+        q = nn.Variable((tgt_len, batch_size, embed_dim))
+        k = nn.Variable((src_len, batch_size, kdim))
+        v = nn.Variable((src_len, batch_size, vdim))
+
+        out, w = PF.multi_head_attention(q, k, v)
+        out.forward()
+
+    Args:
+        query (~nnabla.Variable): Input N-D array with shape :math:`(L_T, B, E)`.
+        key (~nnabla.Variable): Input N-D array with shape :math:`(L_S, B, E_k)`.
+        value (~nnabla.Variable): Input N-D array with shape :math:`(L_S, B, E_v)`.
+        num_heads (int, optional): Number of attention heads. Note that embedding dimensoin E must be divisible by the number of heads. Default is 12 which is conventional.
+        dropout (float, optional): Dropout ratio applied to parameters. Default is 0.
+        rng (numpy.random.RandomState, optional): Random generator for Initializer. Default is None.
+        with_bias (bool, optional): Specify whether to include the bias parameters. Default is False.
+        add_attn_bias (bool, optional): Specify whether to add attention bias parameters for key and value. Default is False.
+        additive_mask (~nnabla.Variable, optional): Input N-D array with shape :math:`(L_T, L_S)`. Values will be added to the attention layer to prevent attention to certain positions.
+        key_padding_mask (~nnabla.Variable, optional): Input N-D array with shape :math:`(B, L_S)`. Specified padding elements will be ignored by the attention layer. Values must be either 1 or 0.
+        fix_parameters (bool, optional): When set to `True`, the weights and biases will not be updated. Default is False.
+        param_init (dict, optional):
+            Parameter initializers can be set with a dict. Possible keys of the dict include q_weight, k_weight, v_weight, q_bias, k_bias, v_bias, out_weight, out_bias, attn_bias_k, attn_bias_v.
+            A value of the dict must be an :obj:`~nnabla.initializer.Initializer`
+            or a :obj:`numpy.ndarray`.
+            E.g. ``{'q_bias': ConstantIntializer(0)}``.
+
+    Returns:
+        ~nnabla.Variable: Output :math:`y` with shape :math:`(L_T, B, E)`
+        ~nnabla.Variable: Output :math:`h_n` with shape :math:`(B, L_T, L_S)`
+    '''
+
+    embed_dim = query.shape[2]
+    kdim = key.shape[2]
+    vdim = value.shape[2]
+
+    if param_init is None:
+        param_init = {}
+
+    q_weight = param_init.get('q_weight', UniformInitializer(
+        calc_uniform_lim_glorot(embed_dim, embed_dim), rng))
+    k_weight = param_init.get('k_weight', UniformInitializer(
+        calc_uniform_lim_glorot(kdim, embed_dim), rng))
+    v_weight = param_init.get('v_weight', UniformInitializer(
+        calc_uniform_lim_glorot(vdim, embed_dim), rng))
+
+    qw = get_parameter_or_create(
+        "q_weight", (embed_dim, embed_dim), q_weight, True, not fix_parameters)
+    kw = get_parameter_or_create(
+        "k_weight", (kdim, embed_dim), k_weight, True, not fix_parameters)
+    vw = get_parameter_or_create(
+        "v_weight", (vdim, embed_dim), v_weight, True, not fix_parameters)
+
+    out_weight = param_init.get('out_weight', UniformInitializer(
+        calc_uniform_lim_glorot(embed_dim, embed_dim), rng))
+
+    ow = get_parameter_or_create("out_weight", (
+        embed_dim, embed_dim), out_weight, True, not fix_parameters)
+
+    qb = kb = vb = ob = None
+    if with_bias:
+        q_bias = param_init.get('q_bias', ConstantInitializer())
+        k_bias = param_init.get('k_bias', ConstantInitializer())
+        v_bias = param_init.get('v_bias', ConstantInitializer())
+        out_bias = param_init.get('out_bias', ConstantInitializer())
+
+        qb = get_parameter_or_create(
+            "q_bias", (embed_dim, ), q_bias, True, not fix_parameters)
+        kb = get_parameter_or_create(
+            "k_bias", (embed_dim, ), k_bias, True, not fix_parameters)
+        vb = get_parameter_or_create(
+            "v_bias", (embed_dim, ), v_bias, True, not fix_parameters)
+        ob = get_parameter_or_create(
+            "out_bias", (embed_dim, ), out_bias, True, not fix_parameters)
+
+    abk = abv = None
+    if add_attn_bias:
+        attn_bias_k = param_init.get('attn_bias_k', UniformInitializer(
+            calc_uniform_lim_glorot(embed_dim, 1), rng))
+        attn_bias_v = param_init.get('attn_bias_v', UniformInitializer(
+            calc_uniform_lim_glorot(embed_dim, 1), rng))
+
+        abk = get_parameter_or_create(
+            "attn_bias_k", (1, 1, embed_dim), attn_bias_k, True, not fix_parameters)
+        abv = get_parameter_or_create(
+            "attn_bias_v", (1, 1, embed_dim), attn_bias_v, True, not fix_parameters)
+
+    return F.multi_head_attention(query, key, value, num_heads, qw, kw, vw, ow, qb, kb, vb, ob, abk, abv, dropout, additive_mask=additive_mask, key_padding_mask=key_padding_mask)

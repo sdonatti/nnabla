@@ -420,6 +420,9 @@ INQConvolution:
 FixedPointQuantize:
   float: [float]
   half: [Half]
+MinMaxQuantize:
+  float: [float]
+  half: [Half]
 Pow2Quantize:
   float: [float]
   half: [Half]
@@ -507,5 +510,8 @@ GatherNd:
   float: [float]
   half: [Half]
 ScatterNd:
+  float: [float]
+  half: [Half]
+MaxPoolingBackward:
   float: [float]
   half: [Half]

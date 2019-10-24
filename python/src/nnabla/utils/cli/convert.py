@@ -12,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
-import sys
 
 import nnabla.utils.converter
 from nnabla.utils.converter import get_category_info_string
@@ -162,5 +160,7 @@ def add_convert_command(subparsers):
                            help='Default type of variable')
     subparser.add_argument('-s', '--settings', type=str, nargs=1, default=None,
                            help='Settings in YAML format file.')
+    subparser.add_argument('--api', type=int, default=-1,
+                           help='Set API Level to convert to, default is highest API Level.')
 
     subparser.set_defaults(func=convert_command)

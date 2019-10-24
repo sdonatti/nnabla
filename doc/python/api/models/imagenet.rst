@@ -10,6 +10,10 @@ The pre-trained models can be used for both inference and training as following:
 .. code-block:: python
 
     # Create ResNet-50 for inference
+    import nnabla as nn
+    import nnabla.functions as F
+    import nnabla.parametric_functions as PF
+    import numpy as np
     from nnabla.models.imagenet import ResNet50
     model = ResNet50()
     batch_size = 1
@@ -69,6 +73,11 @@ Available models are summarized in the following table. Error rates are calculat
     "`InceptionV3 <https://nnabla.org/pretrained-models/nnp_models/imagenet/Inception-v3/Inception-v3.nnp>`_", "InceptionV3", 21.82, 5.88, Neural Network Console
     "`Xception <https://nnabla.org/pretrained-models/nnp_models/imagenet/Xception/Xception.nnp>`_", "Xception", 23.59, 6.91, Neural Network Console
     "`GoogLeNet <https://nnabla.org/pretrained-models/nnp_models/imagenet/GoogLeNet/GoogLeNet.nnp>`_", "GoogLeNet", 31.22, 11.34, Neural Network Console
+    "`ResNeXt-50 <https://nnabla.org/pretrained-models/nnp_models/imagenet/ResNeXt-50/ResNeXt-50.nnp>`_", "ResNeXt50", 22.95, 6.73, Neural Network Console
+    "`ResNeXt-101 <https://nnabla.org/pretrained-models/nnp_models/imagenet/ResNeXt-101/ResNeXt-101.nnp>`_", "ResNeXt101", 22.80, 6.74, Neural Network Console
+    "`ShuffleNet <https://nnabla.org/pretrained-models/nnp_models/imagenet/ShuffleNet/ShuffleNet.nnp>`_", "ShuffleNet10", 34.15, 13.85, Neural Network Console
+    "`ShuffleNet-0.5x <https://nnabla.org/pretrained-models/nnp_models/imagenet/ShuffleNet-0.5x/ShuffleNet-0.5x.nnp>`_", "ShuffleNet05", 41.99, 19.64, Neural Network Console
+    "`ShuffleNet-2.0x <https://nnabla.org/pretrained-models/nnp_models/imagenet/ShuffleNet-2.0x/ShuffleNet-2.0x.nnp>`_", "ShuffleNet20", 30.34, 11.12, Neural Network Console
 
 
 Common interfaces
@@ -145,4 +154,25 @@ List of models
     :members:
 
 .. autoclass:: GoogLeNet
+    :members:
+
+.. autoclass:: ResNeXt50
+    :members:
+
+.. autoclass:: ResNeXt101
+    :members:
+
+.. autoclass:: ResNeXt
+    :members:
+
+.. autoclass:: ShuffleNet10
+    :members:
+
+.. autoclass:: ShuffleNet05
+    :members:
+
+.. autoclass:: ShuffleNet20
+    :members:
+
+.. autoclass:: ShuffleNet
     :members:
